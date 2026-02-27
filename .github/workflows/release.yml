@@ -1,0 +1,54 @@
+name: "publish"
+
+on:
+  push:
+    tags:
+      - 'v*' # 当你推送以 v 开头的标签时触发，如 v1.0.0
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write # 必须开启写入权限，否则无法创建 Release
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest] # 如果以后需要 Mac/Linux，可以在这里添加
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. 安装 Node.js
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # 2. 安装 Rust
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      # 3. Rust 编译缓存（大幅提升后续打包速度）
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      # 4. 安装 pnpm 并安装前端依赖
+      - name: install pnpm
+        run: npm install -g pnpm
+
+      - name: install dependencies
+        run: pnpm install
+
+      # 5. 执行打包并发布 Release
+      - name: build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__ # 自动获取 tauri.conf.json 里的版本号作为标签名
+          releaseName: "Auto Sleeper v__VERSION__"
+          releaseBody: "自动生成的 Windows 打包版本。"
+          releaseDraft: true # 先作为草稿发布，你可以手动在 GitHub 检查没问题后再点发布
+          prerelease: false
